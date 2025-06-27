@@ -1,3 +1,4 @@
+// === FINAL ChatClientGUI.java (with robust roomName parsing + active close button) ===
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -10,6 +11,7 @@ public class ChatClientGUI extends JFrame {
     private JButton sendButton;
     private JButton connectButton;
     private JButton createRoomButton;
+    private JButton closeRoomButton;
     private JTextField nameField;
     private JTextField serverField;
     private JTextField portField;
@@ -60,21 +62,43 @@ public class ChatClientGUI extends JFrame {
         createRoomButton.setEnabled(false);
         createRoomButton.addActionListener(e -> showRoomInputDialog());
 
-        roomInfoLabel = new JLabel("Klik dua kali untuk join room. Klik dua kali room lain untuk pindah.");
+        closeRoomButton = new JButton("Tutup Room");
+        closeRoomButton.setEnabled(false);
+        closeRoomButton.addActionListener(e -> closeCurrentRoom());
+
+        roomInfoLabel = new JLabel("Klik dua kali untuk join room. Klik satu kali untuk menyeleksi.");
 
         JPanel roomPanel = new JPanel(new BorderLayout());
+        JPanel roomButtonPanel = new JPanel(new GridLayout(2, 1));
+        roomButtonPanel.add(closeRoomButton);
+        roomButtonPanel.add(createRoomButton);
         roomPanel.add(roomInfoLabel, BorderLayout.NORTH);
         roomPanel.add(roomScroll, BorderLayout.CENTER);
-        roomPanel.add(createRoomButton, BorderLayout.SOUTH);
+        roomPanel.add(roomButtonPanel, BorderLayout.SOUTH);
 
         roomList.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
                     String selectedRoom = roomList.getSelectedValue();
-                    if (selectedRoom != null && selectedRoom.contains("(")) {
-                        joinRoom(selectedRoom.split(" \\(")[0]);
+                    if (selectedRoom != null) {
+                        String roomName = extractRoomName(selectedRoom);
+                        joinRoom(roomName);
                     }
                 }
+            }
+        });
+
+        roomList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String selected = roomList.getSelectedValue();
+                if (selected != null && selected.contains("(owner)")) {
+                    String selectedRoom = extractRoomName(selected);
+                    if (selectedRoom.equals(currentRoom)) {
+                        closeRoomButton.setEnabled(true);
+                        return;
+                    }
+                }
+                closeRoomButton.setEnabled(false);
             }
         });
 
@@ -121,6 +145,25 @@ public class ChatClientGUI extends JFrame {
         pack();
         setLocationRelativeTo(null);
         setVisible(true);
+    }
+
+    private String extractRoomName(String label) {
+        // Ambil nama room sebelum tanda ' (' pertama
+        int idx = label.indexOf(" (");
+        return idx >= 0 ? label.substring(0, idx).trim() : label.trim();
+    }
+
+    private void closeCurrentRoom() {
+        String selected = roomList.getSelectedValue();
+        if (selected != null) {
+            String roomName = extractRoomName(selected);
+            try {
+                out.writeUTF("DELETE_ROOM:" + roomName);
+                closeRoomButton.setEnabled(false);
+            } catch (IOException e) {
+                showMessage("Gagal menutup room.");
+            }
+        }
     }
 
     private void connectToServer() {
@@ -205,9 +248,9 @@ public class ChatClientGUI extends JFrame {
             while (connected && socket != null && !socket.isClosed()) {
                 String msg = in.readUTF();
                 if (msg.startsWith("ROOMS:")) {
+                    String raw = msg.substring(6).trim();
                     SwingUtilities.invokeLater(() -> {
                         roomListModel.clear();
-                        String raw = msg.substring(6).trim();
                         if (raw.isEmpty()) {
                             roomInfoLabel.setText("Belum ada room tersedia.");
                         } else {
@@ -217,12 +260,22 @@ public class ChatClientGUI extends JFrame {
                                     roomListModel.addElement(room.trim());
                                 }
                             }
-                            roomInfoLabel.setText("Klik dua kali untuk join room. Klik dua kali room lain untuk pindah.");
+                            roomInfoLabel.setText("Klik dua kali untuk join room. Klik satu kali untuk menyeleksi.");
                         }
                     });
                 } else if (msg.startsWith("USERS:")) {
                     String users = msg.substring(6);
                     JOptionPane.showMessageDialog(this, users.isEmpty() ? "Belum ada user." : users, "Pengguna di room", JOptionPane.INFORMATION_MESSAGE);
+                } else if (msg.startsWith("ROOM_CLOSED:")) {
+                    String closedRoom = msg.substring(13);
+                    if (currentRoom.equals(closedRoom)) {
+                        currentRoom = "";
+                        messageField.setEnabled(false);
+                        sendButton.setEnabled(false);
+                        closeRoomButton.setEnabled(false);
+                        roomTitleLabel.setText("");
+                        showMessage("Room " + closedRoom + " telah ditutup oleh pemilik.");
+                    }
                 } else {
                     String display = msg;
                     if (msg.contains(": ") && msg.contains("[")) {
@@ -274,6 +327,7 @@ public class ChatClientGUI extends JFrame {
         messageField.setEnabled(false);
         sendButton.setEnabled(false);
         createRoomButton.setEnabled(false);
+        closeRoomButton.setEnabled(false);
         roomTitleLabel.setText("");
     }
 

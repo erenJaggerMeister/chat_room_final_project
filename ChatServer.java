@@ -4,8 +4,14 @@ import java.util.*;
 
 public class ChatServer {
     private static final int PORT = 3355;
+
+    // Menyimpan semua chat room yang aktif (key = nama room)
     private static Map<String, ChatRoom> rooms = Collections.synchronizedMap(new HashMap<>());
 
+    // Menyimpan semua klien aktif untuk broadcast daftar room
+    private static Set<ClientHandler> allClients = Collections.synchronizedSet(new HashSet<>());
+
+    // Entry point server
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = new ServerSocket(PORT);
         System.out.println("Server started on port " + PORT);
@@ -13,20 +19,22 @@ public class ChatServer {
         while (true) {
             Socket clientSocket = serverSocket.accept();
             ClientHandler clientHandler = new ClientHandler(clientSocket);
-            clientHandler.start();
+            clientHandler.start(); // Handle client secara paralel
         }
     }
 
+    // Kelas ChatRoom: merepresentasikan 1 ruang obrolan
     static class ChatRoom {
-        String name;
-        String owner;
-        Set<ClientHandler> users = Collections.synchronizedSet(new HashSet<>());
+        String name;                     // Nama room
+        String owner;                    // Pemilik room
+        Set<ClientHandler> users = Collections.synchronizedSet(new HashSet<>()); // Anggota room
 
         public ChatRoom(String name, String owner) {
             this.name = name;
             this.owner = owner;
         }
 
+        // Kirim pesan dari pengirim ke semua anggota room
         public void broadcast(String message, ClientHandler sender) {
             synchronized (users) {
                 for (ClientHandler user : users) {
@@ -35,6 +43,7 @@ public class ChatServer {
             }
         }
 
+        // Kirim pesan sistem (tanpa pengirim spesifik)
         public void sendSystemMessage(String message) {
             synchronized (users) {
                 for (ClientHandler user : users) {
@@ -43,6 +52,7 @@ public class ChatServer {
             }
         }
 
+        // Dapatkan daftar user dalam room sebagai string
         public String getUserList() {
             StringBuilder sb = new StringBuilder();
             synchronized (users) {
@@ -50,22 +60,24 @@ public class ChatServer {
                     sb.append(user.clientName).append(", ");
                 }
             }
-            if (sb.length() > 0) sb.setLength(sb.length() - 2);
+            if (sb.length() > 0) sb.setLength(sb.length() - 2); // Hapus koma terakhir
             return sb.toString();
         }
     }
 
+    // Kelas ClientHandler: menangani komunikasi dengan satu klien
     static class ClientHandler extends Thread {
         private Socket socket;
         private DataInputStream in;
         private DataOutputStream out;
-        private ChatRoom currentRoom = null;
+        private ChatRoom currentRoom = null; // Room yang sedang diikuti
         public String clientName;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
 
+        // Kirim pesan ke klien
         public void sendMessage(String message) {
             try {
                 out.writeUTF(message);
@@ -74,8 +86,10 @@ public class ChatServer {
             }
         }
 
+        // Proses utama klien setelah terkoneksi
         public void run() {
             try {
+                allClients.add(this);
                 in = new DataInputStream(socket.getInputStream());
                 out = new DataOutputStream(socket.getOutputStream());
 
@@ -83,6 +97,7 @@ public class ChatServer {
                 clientName = in.readUTF();
                 System.out.println(clientName + " joined the chat.");
 
+                // Loop awal: user pilih/join/buat room
                 while (true) {
                     String req = in.readUTF();
 
@@ -92,14 +107,14 @@ public class ChatServer {
                     }
 
                     if (req.startsWith("NEW:")) {
-                        String newRoom = req.substring(4).trim();
+                        String newRoom = req.substring("NEW:".length()).trim();
                         if (!rooms.containsKey(newRoom)) {
                             ChatRoom room = new ChatRoom(newRoom, clientName);
                             rooms.put(newRoom, room);
                             System.out.println(clientName + " created room: " + newRoom);
                         }
-                        broadcastRoomListToAll();
                         sendRoomList();
+                        broadcastRoomListToAll();
                         continue;
                     }
 
@@ -112,6 +127,7 @@ public class ChatServer {
                     }
                 }
 
+                // Loop setelah masuk room
                 while (true) {
                     String message = in.readUTF();
 
@@ -131,7 +147,7 @@ public class ChatServer {
                     }
 
                     if (message.startsWith("NEW:")) {
-                        String newRoom = message.substring(4).trim();
+                        String newRoom = message.substring("NEW:".length()).trim();
                         if (!rooms.containsKey(newRoom)) {
                             ChatRoom room = new ChatRoom(newRoom, clientName);
                             rooms.put(newRoom, room);
@@ -142,17 +158,45 @@ public class ChatServer {
                         continue;
                     }
 
+                    if (message.startsWith("DELETE_ROOM:")) {
+                        String roomToDelete = message.substring("DELETE_ROOM:".length()).trim();
+                        ChatRoom room = rooms.get(roomToDelete);
+
+                        // Validasi pemilik
+                        if (room != null && room.owner != null && room.owner.equalsIgnoreCase(clientName)) {
+                            synchronized (rooms) {
+                                rooms.remove(roomToDelete);
+                                String notif = "Room \"" + roomToDelete + "\" telah ditutup oleh " + clientName + ".";
+                                System.out.println(clientName + " CLOSED room: " + roomToDelete);
+                                for (ClientHandler user : room.users) {
+                                    user.sendMessage("ROOM_CLOSED:" + roomToDelete);
+                                    user.sendMessage("SYSTEM: " + notif);
+                                    user.currentRoom = null;
+                                }
+                                room.users.clear();
+                            }
+                            broadcastRoomListToAll();
+                        } else {
+                            out.writeUTF("Kamu bukan pemilik room ini.");
+                        }
+                        continue;
+                    }
+
+                    // Ganti room
                     if (rooms.containsKey(message)) {
-                        if (!message.equals(currentRoom.name)) {
+                        if (currentRoom == null || !message.equals(currentRoom.name)) {
                             leaveCurrentRoom();
                             joinRoom(message);
                         }
                         continue;
                     }
 
-                    System.out.println(clientName + ": " + message);
-                    System.out.println("Broadcast from " + clientName + ": " + message);
-                    currentRoom.broadcast(message, this);
+                    // Broadcast pesan biasa ke room
+                    if (currentRoom != null) {
+                        currentRoom.broadcast(message, this);
+                    } else {
+                        sendRoomList();
+                    }
                 }
 
                 leaveCurrentRoom();
@@ -160,26 +204,32 @@ public class ChatServer {
             } catch (IOException e) {
                 System.out.println(clientName + " disconnected unexpectedly.");
                 leaveCurrentRoom();
+            } finally {
+                allClients.remove(this);
             }
         }
 
+        // Keluar dari room aktif
         private void leaveCurrentRoom() {
             if (currentRoom != null) {
                 currentRoom.users.remove(this);
                 currentRoom.sendSystemMessage(clientName + " left the room.");
-                System.out.println(clientName + " left the chat.");
+                System.out.println(clientName + " left room: " + currentRoom.name);
                 broadcastRoomListToAll();
                 currentRoom = null;
             }
         }
 
+        // Masuk ke room
         private void joinRoom(String roomName) {
             currentRoom = rooms.get(roomName);
             currentRoom.users.add(this);
             currentRoom.sendSystemMessage(clientName + " joined the room.");
+            System.out.println(clientName + " joined room: " + roomName);
             broadcastRoomListToAll();
         }
 
+        // Kirim daftar room yang tersedia ke klien ini
         private void sendRoomList() {
             StringBuilder sb = new StringBuilder();
             synchronized (rooms) {
@@ -187,7 +237,11 @@ public class ChatServer {
                     sb.append(entry.getKey())
                       .append(" (")
                       .append(entry.getValue().users.size())
-                      .append(" users),");
+                      .append(" users)");
+                    if (entry.getValue().owner.equals(clientName)) {
+                        sb.append(" (owner)");
+                    }
+                    sb.append(",");
                 }
             }
             try {
@@ -198,22 +252,11 @@ public class ChatServer {
         }
     }
 
+    // Kirim ulang daftar room ke semua klien aktif
     private static void broadcastRoomListToAll() {
-        StringBuilder sb = new StringBuilder();
-        synchronized (rooms) {
-            for (Map.Entry<String, ChatRoom> entry : rooms.entrySet()) {
-                sb.append(entry.getKey())
-                  .append(" (")
-                  .append(entry.getValue().users.size())
-                  .append(" users),");
-            }
-        }
-        String roomList = "ROOMS:" + sb.toString();
-        synchronized (rooms) {
-            for (ChatRoom room : rooms.values()) {
-                for (ClientHandler user : room.users) {
-                    user.sendMessage(roomList);
-                }
+        synchronized (allClients) {
+            for (ClientHandler user : allClients) {
+                user.sendRoomList();
             }
         }
     }
