@@ -12,6 +12,7 @@ public class ChatClientGUI extends JFrame {
     private JButton connectButton;
     private JButton createRoomButton;
     private JButton closeRoomButton;
+    private JButton kickUserButton;// author: Marcellius ;; date add : 28/06/2025
     private JTextField nameField;
     private JTextField serverField;
     private JTextField portField;
@@ -26,6 +27,7 @@ public class ChatClientGUI extends JFrame {
     private String clientName;
     private String currentRoom = "";
     private boolean connected = false;
+    private boolean isRoomOwner = false;// author: Marcellius ;; date add : 28/06/2025
 
     public ChatClientGUI() {
         initGUI();
@@ -66,12 +68,17 @@ public class ChatClientGUI extends JFrame {
         closeRoomButton.setEnabled(false);
         closeRoomButton.addActionListener(e -> closeCurrentRoom());
 
+        kickUserButton = new JButton("Kick User");// author: Marcellius ;; date add : 28/06/2025
+        kickUserButton.setEnabled(false);// author: Marcellius ;; date add : 28/06/2025
+        kickUserButton.addActionListener(e -> showKickUserDialog());// author: Marcellius ;; date add : 28/06/2025
+
         roomInfoLabel = new JLabel("Klik dua kali untuk join room. Klik satu kali untuk menyeleksi.");
 
         JPanel roomPanel = new JPanel(new BorderLayout());
-        JPanel roomButtonPanel = new JPanel(new GridLayout(2, 1));
-        roomButtonPanel.add(closeRoomButton);
+        JPanel roomButtonPanel = new JPanel(new GridLayout(3, 1, 5, 5));
         roomButtonPanel.add(createRoomButton);
+        roomButtonPanel.add(closeRoomButton);
+        roomButtonPanel.add(kickUserButton);
         roomPanel.add(roomInfoLabel, BorderLayout.NORTH);
         roomPanel.add(roomScroll, BorderLayout.CENTER);
         roomPanel.add(roomButtonPanel, BorderLayout.SOUTH);
@@ -95,10 +102,12 @@ public class ChatClientGUI extends JFrame {
                     String selectedRoom = extractRoomName(selected);
                     if (selectedRoom.equals(currentRoom)) {
                         closeRoomButton.setEnabled(true);
+                        kickUserButton.setEnabled(true);// author: Marcellius ;; date add : 28/06/2025
                         return;
                     }
                 }
                 closeRoomButton.setEnabled(false);
+                kickUserButton.setEnabled(false);// author: Marcellius ;; date add : 28/06/2025
             }
         });
 
@@ -160,9 +169,55 @@ public class ChatClientGUI extends JFrame {
             try {
                 out.writeUTF("DELETE_ROOM:" + roomName);
                 closeRoomButton.setEnabled(false);
+                kickUserButton.setEnabled(false);
             } catch (IOException e) {
                 showMessage("Gagal menutup room.");
             }
+        }
+    }
+
+    /**
+     * @author Marcellius
+     * @since 28/06/2025
+     * // author: Marcellius ;; date add : 28/06/2025
+     */
+    private void showKickUserDialog() {
+        if (!isRoomOwner || currentRoom.isEmpty()) {
+            showMessage("Anda bukan pemilik room ini.");
+            return;
+        }
+
+        // First, request user list to show in selection dialog
+        try {
+            // Create a simple input dialog for now
+            String targetUser = JOptionPane.showInputDialog(
+                this, 
+                "Masukkan nama user yang ingin dikeluarkan:", 
+                "Kick User", 
+                JOptionPane.QUESTION_MESSAGE
+            );
+            
+            if (targetUser != null && !targetUser.trim().isEmpty()) {
+                targetUser = targetUser.trim();
+                if (targetUser.equals(clientName)) {
+                    JOptionPane.showMessageDialog(this, "Anda tidak bisa mengeluarkan diri sendiri!", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "Apakah Anda yakin ingin mengeluarkan user '" + targetUser + "' dari room?",
+                    "Konfirmasi Kick User",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+                );
+                
+                if (confirm == JOptionPane.YES_OPTION) {
+                    out.writeUTF("KICK_USER:" + targetUser);
+                }
+            }
+        } catch (IOException e) {
+            showMessage("Gagal mengeluarkan user.");
         }
     }
 
@@ -216,8 +271,33 @@ public class ChatClientGUI extends JFrame {
             chatArea.setText("");
             currentRoom = roomName;
             roomTitleLabel.setText("# " + roomName + " (klik untuk lihat anggota)");
+            
+            // Update room owner status
+            updateRoomOwnerStatus();
+            
         } catch (IOException e) {
             showMessage("Gagal join room.");
+        }
+    }
+
+    private void updateRoomOwnerStatus() {
+        isRoomOwner = false;
+        for (int i = 0; i < roomListModel.size(); i++) {
+            String roomEntry = roomListModel.getElementAt(i);
+            String roomName = extractRoomName(roomEntry);
+            if (roomName.equals(currentRoom) && roomEntry.contains("(owner)")) {
+                isRoomOwner = true;
+                break;
+            }
+        }
+        
+        // Update button states
+        if (isRoomOwner && !currentRoom.isEmpty()) {
+            closeRoomButton.setEnabled(true);
+            kickUserButton.setEnabled(true);// author: Marcellius ;; date add : 28/06/2025
+        } else {
+            closeRoomButton.setEnabled(false);
+            kickUserButton.setEnabled(false);// author: Marcellius ;; date add : 28/06/2025
         }
     }
 
@@ -262,19 +342,34 @@ public class ChatClientGUI extends JFrame {
                             }
                             roomInfoLabel.setText("Klik dua kali untuk join room. Klik satu kali untuk menyeleksi.");
                         }
+                        updateRoomOwnerStatus();
                     });
                 } else if (msg.startsWith("USERS:")) {
                     String users = msg.substring(6);
                     JOptionPane.showMessageDialog(this, users.isEmpty() ? "Belum ada user." : users, "Pengguna di room", JOptionPane.INFORMATION_MESSAGE);
-                } else if (msg.startsWith("ROOM_CLOSED:")) {
+                } else if (msg.startsWith("ROOM_CLOSED:")) { // author: Marcellius ;; date add : 28/06/2025
                     String closedRoom = msg.substring(13);
                     if (currentRoom.equals(closedRoom)) {
                         currentRoom = "";
                         messageField.setEnabled(false);
                         sendButton.setEnabled(false);
                         closeRoomButton.setEnabled(false);
+                        kickUserButton.setEnabled(false);
                         roomTitleLabel.setText("");
+                        isRoomOwner = false;
                         showMessage("Room " + closedRoom + " telah ditutup oleh pemilik.");
+                    }
+                } else if (msg.startsWith("KICKED_FROM_ROOM:")) {
+                    String roomName = msg.substring(17);
+                    if (currentRoom.equals(roomName)) {
+                        currentRoom = "";
+                        messageField.setEnabled(false);
+                        sendButton.setEnabled(false);
+                        closeRoomButton.setEnabled(false);
+                        kickUserButton.setEnabled(false);
+                        roomTitleLabel.setText("");
+                        isRoomOwner = false;
+                        chatArea.setText("");
                     }
                 } else {
                     String display = msg;
@@ -328,7 +423,9 @@ public class ChatClientGUI extends JFrame {
         sendButton.setEnabled(false);
         createRoomButton.setEnabled(false);
         closeRoomButton.setEnabled(false);
+        kickUserButton.setEnabled(false);// author: Marcellius ;; date add : 28/06/2025
         roomTitleLabel.setText("");
+        isRoomOwner = false;
     }
 
     private void showMessage(String msg) {

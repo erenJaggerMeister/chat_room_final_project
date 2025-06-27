@@ -63,6 +63,48 @@ public class ChatServer {
             if (sb.length() > 0) sb.setLength(sb.length() - 2); // Hapus koma terakhir
             return sb.toString();
         }
+
+        /**
+         * 
+         * @author Marcellius
+         * @since 28/06/2025
+         * @param targetUser
+         * @param kickerName
+         * @return
+         * Kick user dari room (hanya owner yang bisa)
+         */
+        public boolean kickUser(String targetUser, String kickerName) {
+            if (!owner.equals(kickerName)) {
+                return false; // Bukan owner
+            }
+
+            synchronized (users) {
+                ClientHandler targetHandler = null;
+                for (ClientHandler user : users) {
+                    if (user.clientName.equals(targetUser)) {
+                        targetHandler = user;
+                        break;
+                    }
+                }
+
+                if (targetHandler != null && !targetHandler.clientName.equals(owner)) {
+                    // Kick user
+                    users.remove(targetHandler);
+                    targetHandler.currentRoom = null;
+                    
+                    // Notify kicked user
+                    targetHandler.sendMessage("KICKED_FROM_ROOM:" + name);
+                    targetHandler.sendMessage("SYSTEM: Anda telah dikeluarkan dari room \"" + name + "\" oleh " + kickerName);
+                    
+                    // Notify other users in room
+                    sendSystemMessage(targetUser + " telah dikeluarkan dari room oleh " + kickerName);
+                    
+                    System.out.println(kickerName + " kicked " + targetUser + " from room: " + name);
+                    return true;
+                }
+            }
+            return false; // User tidak ditemukan atau owner mencoba kick dirinya sendiri
+        }
     }
 
     // Kelas ClientHandler: menangani komunikasi dengan satu klien
@@ -178,6 +220,26 @@ public class ChatServer {
                             broadcastRoomListToAll();
                         } else {
                             out.writeUTF("Kamu bukan pemilik room ini.");
+                        }
+                        continue;
+                    }
+
+                    // author: Marcellius ;; date add : 28/06/2025
+                    if (message.startsWith("KICK_USER:")) {
+                        String targetUser = message.substring("KICK_USER:".length()).trim();
+                        if (currentRoom != null) {
+                            if (currentRoom.kickUser(targetUser, clientName)) {
+                                out.writeUTF("SYSTEM: " + targetUser + " telah dikeluarkan dari room.");
+                                broadcastRoomListToAll();
+                            } else {
+                                if (targetUser.equals(clientName)) {
+                                    out.writeUTF("SYSTEM: Anda tidak bisa mengeluarkan diri sendiri.");
+                                } else if (!currentRoom.owner.equals(clientName)) {
+                                    out.writeUTF("SYSTEM: Hanya pemilik room yang bisa mengeluarkan user.");
+                                } else {
+                                    out.writeUTF("SYSTEM: User " + targetUser + " tidak ditemukan di room ini.");
+                                }
+                            }
                         }
                         continue;
                     }
