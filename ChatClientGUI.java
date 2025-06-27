@@ -11,6 +11,8 @@ public class ChatClientGUI extends JFrame {
     private JButton connectButton;
     private JButton createRoomButton;
     private JTextField nameField;
+    private JTextField serverField;
+    private JTextField portField;
     private DefaultListModel<String> roomListModel;
     private JList<String> roomList;
     private JLabel roomInfoLabel;
@@ -34,6 +36,12 @@ public class ChatClientGUI extends JFrame {
         loginPanel.add(new JLabel("Nama:"));
         nameField = new JTextField(10);
         loginPanel.add(nameField);
+        loginPanel.add(new JLabel("Server:"));
+        serverField = new JTextField("127.0.0.1", 10);
+        loginPanel.add(serverField);
+        loginPanel.add(new JLabel("Port:"));
+        portField = new JTextField("3355", 5);
+        loginPanel.add(portField);
 
         connectButton = new JButton("Connect");
         connectButton.addActionListener(e -> connectToServer());
@@ -61,7 +69,7 @@ public class ChatClientGUI extends JFrame {
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
                     String selectedRoom = roomList.getSelectedValue();
-                    if (selectedRoom != null && !selectedRoom.contains("<")) {
+                    if (selectedRoom != null && selectedRoom.contains("(")) {
                         joinRoom(selectedRoom.split(" \\(")[0]);
                     }
                 }
@@ -101,25 +109,27 @@ public class ChatClientGUI extends JFrame {
 
     private void connectToServer() {
         String name = nameField.getText().trim();
+        String server = serverField.getText().trim();
+        int port = Integer.parseInt(portField.getText().trim());
 
         if (name.isEmpty()) {
             return;
         }
 
         try {
-            int port = 3355;
-            String server = "127.0.0.1";
             socket = new Socket(server, port);
             in = new DataInputStream(socket.getInputStream());
             out = new DataOutputStream(socket.getOutputStream());
 
-            String prompt = in.readUTF(); // abaikan prompt nama
+            String prompt = in.readUTF();
             out.writeUTF(name);
             clientName = name;
             connected = true;
 
             connectButton.setEnabled(false);
             nameField.setEnabled(false);
+            serverField.setEnabled(false);
+            portField.setEnabled(false);
             createRoomButton.setEnabled(true);
 
             Thread t = new Thread(this::readMessages);
@@ -230,6 +240,8 @@ public class ChatClientGUI extends JFrame {
 
         connectButton.setEnabled(true);
         nameField.setEnabled(true);
+        serverField.setEnabled(true);
+        portField.setEnabled(true);
         messageField.setEnabled(false);
         sendButton.setEnabled(false);
         createRoomButton.setEnabled(false);
