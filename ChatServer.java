@@ -4,7 +4,7 @@ import java.util.*;
 
 public class ChatServer {
     private static final int PORT = 3355;
-    private static Map<String, ChatRoom> rooms = Collections.synchronizedMap(new HashMap<String, ChatRoom>());
+    private static Map<String, ChatRoom> rooms = Collections.synchronizedMap(new HashMap<>());
 
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = new ServerSocket(PORT);
@@ -20,7 +20,7 @@ public class ChatServer {
     static class ChatRoom {
         String name;
         String owner;
-        Set<ClientHandler> users = Collections.synchronizedSet(new HashSet<ClientHandler>());
+        Set<ClientHandler> users = Collections.synchronizedSet(new HashSet<>());
 
         public ChatRoom(String name, String owner) {
             this.name = name;
@@ -41,6 +41,17 @@ public class ChatServer {
                     user.sendMessage("[" + name + "] SYSTEM: " + message);
                 }
             }
+        }
+
+        public String getUserList() {
+            StringBuilder sb = new StringBuilder();
+            synchronized (users) {
+                for (ClientHandler user : users) {
+                    sb.append(user.clientName).append(", ");
+                }
+            }
+            if (sb.length() > 0) sb.setLength(sb.length() - 2);
+            return sb.toString();
         }
     }
 
@@ -104,12 +115,18 @@ public class ChatServer {
                 while (true) {
                     String message = in.readUTF();
 
-                    if (message.equalsIgnoreCase("exit")) {
-                        break;
-                    }
+                    if (message.equalsIgnoreCase("exit")) break;
 
                     if (message.equals("_list")) {
                         sendRoomList();
+                        continue;
+                    }
+
+                    if (message.equals("_users")) {
+                        if (currentRoom != null) {
+                            String users = currentRoom.getUserList();
+                            out.writeUTF("USERS:" + users);
+                        }
                         continue;
                     }
 
@@ -151,7 +168,6 @@ public class ChatServer {
                 currentRoom.users.remove(this);
                 currentRoom.sendSystemMessage(clientName + " left the room.");
                 System.out.println(clientName + " left the chat.");
-                System.out.println("Broadcast from " + clientName + ": left the chat.");
                 broadcastRoomListToAll();
                 currentRoom = null;
             }

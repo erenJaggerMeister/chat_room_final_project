@@ -16,11 +16,13 @@ public class ChatClientGUI extends JFrame {
     private DefaultListModel<String> roomListModel;
     private JList<String> roomList;
     private JLabel roomInfoLabel;
+    private JLabel roomTitleLabel;
 
     private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
     private String clientName;
+    private String currentRoom = "";
     private boolean connected = false;
 
     public ChatClientGUI() {
@@ -81,7 +83,21 @@ public class ChatClientGUI extends JFrame {
         chatArea = new JTextArea(20, 50);
         chatArea.setEditable(false);
         JScrollPane scroll = new JScrollPane(chatArea);
-        add(scroll, BorderLayout.CENTER);
+
+        roomTitleLabel = new JLabel(" ");
+        roomTitleLabel.setForeground(Color.BLUE.darker());
+        roomTitleLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        roomTitleLabel.setToolTipText("Klik untuk melihat siapa saja di room ini");
+        roomTitleLabel.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                requestUserList();
+            }
+        });
+
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(roomTitleLabel, BorderLayout.NORTH);
+        centerPanel.add(scroll, BorderLayout.CENTER);
+        add(centerPanel, BorderLayout.CENTER);
 
         JPanel bottomPanel = new JPanel(new BorderLayout());
         messageField = new JTextField();
@@ -112,9 +128,7 @@ public class ChatClientGUI extends JFrame {
         String server = serverField.getText().trim();
         int port = Integer.parseInt(portField.getText().trim());
 
-        if (name.isEmpty()) {
-            return;
-        }
+        if (name.isEmpty()) return;
 
         try {
             socket = new Socket(server, port);
@@ -157,8 +171,20 @@ public class ChatClientGUI extends JFrame {
             messageField.setEnabled(true);
             sendButton.setEnabled(true);
             chatArea.setText("");
+            currentRoom = roomName;
+            roomTitleLabel.setText("# " + roomName + " (klik untuk lihat anggota)");
         } catch (IOException e) {
             showMessage("Gagal join room.");
+        }
+    }
+
+    private void requestUserList() {
+        if (out != null && !currentRoom.isEmpty()) {
+            try {
+                out.writeUTF("_users");
+            } catch (IOException e) {
+                showMessage("Gagal minta daftar user.");
+            }
         }
     }
 
@@ -194,6 +220,9 @@ public class ChatClientGUI extends JFrame {
                             roomInfoLabel.setText("Klik dua kali untuk join room. Klik dua kali room lain untuk pindah.");
                         }
                     });
+                } else if (msg.startsWith("USERS:")) {
+                    String users = msg.substring(6);
+                    JOptionPane.showMessageDialog(this, users.isEmpty() ? "Belum ada user." : users, "Pengguna di room", JOptionPane.INFORMATION_MESSAGE);
                 } else {
                     String display = msg;
                     if (msg.contains(": ") && msg.contains("[")) {
@@ -245,6 +274,7 @@ public class ChatClientGUI extends JFrame {
         messageField.setEnabled(false);
         sendButton.setEnabled(false);
         createRoomButton.setEnabled(false);
+        roomTitleLabel.setText("");
     }
 
     private void showMessage(String msg) {
