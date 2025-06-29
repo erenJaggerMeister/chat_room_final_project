@@ -31,8 +31,8 @@ Aplikasi chat berbasis Java Socket dengan antarmuka GUI menggunakan Swing.
 
 # Cara Menjalankan
 1. Pastikan semua file `.java` (terutama `ChatServer.java` dan `ChatClientGUI.java`) berada dalam satu folder.
-2. Buka command prompt, lalu ketik java ChatServer untuk menjalankan server.
-3. Buka command prompt lainnya, lalu ketik java ChatClientGUI.
+2. Buka command prompt, lalu ketik `java ChatServer.java` untuk menjalankan server.
+3. Buka command prompt lainnya, lalu ketik `java ChatClientGUI.java`
 4. Setelah aplikasi client terbuka, isi form login dengan data berikut:
     - **Nama**:  
     Nama pengguna yang ingin digunakan (bebas).
