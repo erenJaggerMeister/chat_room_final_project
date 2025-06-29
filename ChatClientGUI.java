@@ -1,10 +1,10 @@
-// === FINAL ChatClientGUI.java (with robust roomName parsing + active close button) ===
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.*;
 
+// Deklarasi class utama turunan dari JFrame
 public class ChatClientGUI extends JFrame {
     private JTextArea chatArea;
     private JTextField messageField;
@@ -21,6 +21,7 @@ public class ChatClientGUI extends JFrame {
     private JLabel roomInfoLabel;
     private JLabel roomTitleLabel;
 
+    // Variabel jaringan dan status koneksi
     private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
@@ -38,6 +39,7 @@ public class ChatClientGUI extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
+        // Panel login untuk memasukkan nama, IP server, dan port
         JPanel loginPanel = new JPanel(new FlowLayout());
         loginPanel.add(new JLabel("Nama:"));
         nameField = new JTextField(10);
@@ -54,12 +56,14 @@ public class ChatClientGUI extends JFrame {
         loginPanel.add(connectButton);
         add(loginPanel, BorderLayout.NORTH);
 
+        // Komponen daftar room
         roomListModel = new DefaultListModel<>();
         roomList = new JList<>(roomListModel);
         roomList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane roomScroll = new JScrollPane(roomList);
         roomScroll.setPreferredSize(new Dimension(200, 0));
 
+        // Tombol room: buat, tutup, dan kick user
         createRoomButton = new JButton("+ Buat Room");
         createRoomButton.setEnabled(false);
         createRoomButton.addActionListener(e -> showRoomInputDialog());
@@ -74,6 +78,7 @@ public class ChatClientGUI extends JFrame {
 
         roomInfoLabel = new JLabel("Klik dua kali untuk join room. Klik satu kali untuk menyeleksi.");
 
+        // Panel kiri untuk daftar room dan tombol-tombolnya
         JPanel roomPanel = new JPanel(new BorderLayout());
         JPanel roomButtonPanel = new JPanel(new GridLayout(3, 1, 5, 5));
         roomButtonPanel.add(createRoomButton);
@@ -83,6 +88,7 @@ public class ChatClientGUI extends JFrame {
         roomPanel.add(roomScroll, BorderLayout.CENTER);
         roomPanel.add(roomButtonPanel, BorderLayout.SOUTH);
 
+        // Klik dua kali untuk join ke room
         roomList.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
@@ -95,6 +101,7 @@ public class ChatClientGUI extends JFrame {
             }
         });
 
+        // Aktifkan tombol tutup/kick jika user adalah owner dari room yang diseleksi
         roomList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 String selected = roomList.getSelectedValue();
@@ -102,12 +109,12 @@ public class ChatClientGUI extends JFrame {
                     String selectedRoom = extractRoomName(selected);
                     if (selectedRoom.equals(currentRoom)) {
                         closeRoomButton.setEnabled(true);
-                        kickUserButton.setEnabled(true);// author: Marcellius ;; date add : 28/06/2025
+                        kickUserButton.setEnabled(true);
                         return;
                     }
                 }
                 closeRoomButton.setEnabled(false);
-                kickUserButton.setEnabled(false);// author: Marcellius ;; date add : 28/06/2025
+                kickUserButton.setEnabled(false);
             }
         });
 
@@ -123,7 +130,7 @@ public class ChatClientGUI extends JFrame {
         roomTitleLabel.setToolTipText("Klik untuk melihat siapa saja di room ini");
         roomTitleLabel.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
-                requestUserList();
+                requestUserList(); // Minta daftar user saat ini di room
             }
         });
 
@@ -132,6 +139,7 @@ public class ChatClientGUI extends JFrame {
         centerPanel.add(scroll, BorderLayout.CENTER);
         add(centerPanel, BorderLayout.CENTER);
 
+        // Panel bawah untuk input pesan dan tombol kirim
         JPanel bottomPanel = new JPanel(new BorderLayout());
         messageField = new JTextField();
         messageField.setEnabled(false);
@@ -145,6 +153,7 @@ public class ChatClientGUI extends JFrame {
 
         add(bottomPanel, BorderLayout.SOUTH);
 
+        // Jika jendela ditutup, lakukan disconnect
         addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent e) {
                 disconnect();
@@ -156,12 +165,13 @@ public class ChatClientGUI extends JFrame {
         setVisible(true);
     }
 
+    // Ekstrak nama room sebelum tanda ' (' jika ada
     private String extractRoomName(String label) {
-        // Ambil nama room sebelum tanda ' (' pertama
         int idx = label.indexOf(" (");
         return idx >= 0 ? label.substring(0, idx).trim() : label.trim();
     }
 
+    // Kirim perintah untuk menutup room saat ini
     private void closeCurrentRoom() {
         String selected = roomList.getSelectedValue();
         if (selected != null) {
@@ -176,11 +186,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
-    /**
-     * @author Marcellius
-     * @since 28/06/2025
-     * // author: Marcellius ;; date add : 28/06/2025
-     */
+     // Tampilkan dialog input user yang ingin di-kick dari room
     private void showKickUserDialog() {
         if (!isRoomOwner || currentRoom.isEmpty()) {
             showMessage("Anda bukan pemilik room ini.");
@@ -221,6 +227,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Lakukan koneksi ke server dan setup awal
     private void connectToServer() {
         String name = nameField.getText().trim();
         String server = serverField.getText().trim();
@@ -255,6 +262,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Minta daftar room ke server
     private void updateRoomList() {
         try {
             out.writeUTF("_list");
@@ -263,6 +271,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Kirim perintah join ke server, update GUI sesuai room
     private void joinRoom(String roomName) {
         try {
             out.writeUTF(roomName);
@@ -280,6 +289,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Cek apakah client adalah pemilik room saat ini
     private void updateRoomOwnerStatus() {
         isRoomOwner = false;
         for (int i = 0; i < roomListModel.size(); i++) {
@@ -301,6 +311,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Kirim permintaan daftar user ke server
     private void requestUserList() {
         if (out != null && !currentRoom.isEmpty()) {
             try {
@@ -311,6 +322,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Tampilkan input dialog untuk nama room baru
     private void showRoomInputDialog() {
         String namaRoom = JOptionPane.showInputDialog(this, "Masukkan nama room baru:");
         if (namaRoom != null && !namaRoom.trim().isEmpty()) {
@@ -323,6 +335,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Thread untuk membaca pesan dari server
     private void readMessages() {
         try {
             while (connected && socket != null && !socket.isClosed()) {
@@ -392,6 +405,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Kirim pesan ke server
     private void sendMessage() {
         String message = messageField.getText().trim();
         if (!message.isEmpty() && !message.startsWith("NEW:")) {
@@ -408,6 +422,7 @@ public class ChatClientGUI extends JFrame {
         }
     }
 
+    // Putus koneksi, reset GUI ke kondisi awal
     private void disconnect() {
         connected = false;
         try {
@@ -428,6 +443,7 @@ public class ChatClientGUI extends JFrame {
         isRoomOwner = false;
     }
 
+    // Tampilkan pesan ke chat area
     private void showMessage(String msg) {
         SwingUtilities.invokeLater(() -> {
             chatArea.append(msg + "\n");
@@ -435,6 +451,7 @@ public class ChatClientGUI extends JFrame {
         });
     }
 
+    // Fungsi main: jalankan aplikasi
     public static void main(String[] args) {
         SwingUtilities.invokeLater(ChatClientGUI::new);
     }
