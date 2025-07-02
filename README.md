@@ -28,6 +28,9 @@ Aplikasi chat berbasis Java Socket dengan antarmuka GUI menggunakan Swing.
 7. **Kick user (owner only)**  
    - Pemilik room bisa memilih dan mengeluarkan pengguna tertentu dari room.
 
+8. **attach file**  
+   - user dalam room bisa mengirimkan sebuah file ke seluruh user yang ada didalam room.
+   - user yang didalam room tersebut akan secara otomatis mendownload file yang diterima ke folder download
 
 # Cara Menjalankan
 1. Pastikan semua file `.java` (terutama `ChatServer.java` dan `ChatClientGUI.java`) berada dalam satu folder.
