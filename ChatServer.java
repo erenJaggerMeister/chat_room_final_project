@@ -105,6 +105,17 @@ public class ChatServer {
             }
             return false; // User tidak ditemukan atau owner mencoba kick dirinya sendiri
         }
+
+        // Broadcast file ke semua anggota room
+        void broadcastFile(String header, byte[] data, ClientHandler sender) {
+            synchronized (users) {
+                for (ClientHandler client : users) {
+                    if (client != sender) {
+                        client.sendFile(header, data);
+                    }
+                }
+            }
+        }
     }
 
     // Kelas ClientHandler: menangani komunikasi dengan satu klien
@@ -125,6 +136,18 @@ public class ChatServer {
                 out.writeUTF(message);
             } catch (IOException e) {
                 System.out.println("Gagal kirim pesan ke " + clientName);
+            }
+        }
+
+        // Kirim file ke klien
+        public void sendFile(String header, byte[] data) {
+            try {
+                out.writeUTF(header); // e.g., FILE:filename:size:sender
+                out.writeInt(data.length);
+                out.write(data);
+                out.flush();
+            } catch (IOException e) {
+                System.out.println("Error sending file to " + clientName);
             }
         }
 
@@ -185,6 +208,11 @@ public class ChatServer {
                             String users = currentRoom.getUserList();
                             out.writeUTF("USERS:" + users);
                         }
+                        continue;
+                    }
+
+                    if (message.startsWith("FILE:")) {
+                        handleIncomingFile(message);
                         continue;
                     }
 
@@ -269,6 +297,20 @@ public class ChatServer {
             } finally {
                 allClients.remove(this);
             }
+        }
+
+        // Handle file from client
+        private void handleIncomingFile(String header) throws IOException {
+            if (currentRoom == null) {
+                sendMessage("Join a room before sending files.");
+                return;
+            }
+            int fileSize = in.readInt();
+            byte[] fileData = new byte[fileSize];
+            in.readFully(fileData);
+            String notifyHeader = header + ":" + clientName;
+            currentRoom.broadcastFile(notifyHeader, fileData, this);
+            System.out.println("Received file from " + clientName + " and broadcasted to room " + currentRoom.name);
         }
 
         // Keluar dari room aktif
